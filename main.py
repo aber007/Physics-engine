@@ -37,9 +37,9 @@ class Block:
         if self.x < 0:
             self.vx = -self.vx * self.eslasticity
             self.x = 0
-        elif self.x > 800 - self.width:
+        elif self.x > self.parent.winwidth - self.width:
             self.vx = -self.vx * self.eslasticity
-            self.x = 800 - self.width
+            self.x = self.parent.winwidth - self.width
         else:
             self.vx *= self.parent.air_resistance
 
@@ -52,7 +52,9 @@ class Block:
 class Game:
     def __init__(self):
         pg.init()
-        self.screen = pg.display.set_mode((800, 600))
+        self.winwidth = 1200
+        self.winheight = 600
+        self.screen = pg.display.set_mode((self.winwidth, self.winheight))
         pg.display.set_caption("Physics")
         self.clock = pg.time.Clock()
         self.done = False
@@ -97,12 +99,7 @@ class Game:
             self.screen.fill((255, 255, 255))
             self.player.update()
             self.player.draw(self.screen)
-            self.grab()
-
-            
-
-
-            
+            self.grab()  
 
             pg.display.flip()
             self.clock.tick(60)
