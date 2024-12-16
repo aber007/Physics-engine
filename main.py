@@ -42,8 +42,7 @@ class Block:
         if self.y > self.parent.winheight - self.height:
             self.y = self.parent.winheight - self.height
             self.vy = -self.vy * self.eslasticity
-            if abs(self.vy) < 0.2:
-                self.vy = 0
+            self.parent.move_up = True
         else:
             self.vy *= self.parent.air_resistance
 
@@ -190,6 +189,7 @@ class Game:
         self.creating = False
         self.waitforrelease = False
         self.is_grabbing = False
+        self.move_up = False
         
         self.gravity = 0.5
         self.friction = 1
@@ -227,7 +227,8 @@ class Game:
                 pg.draw.rect(self.screen, (0, 255, 255), (min(self.start_position[0], self.end_position[0]), min(self.start_position[1], self.end_position[1]), abs(self.end_position[0] - self.start_position[0]), abs(self.end_position[1] - self.start_position[1])))
             elif pg.mouse.get_pressed()[2] == False and self.creating == True:
                 number = len(self.players)
-                self.players.append(Block(min(self.start_position[0], self.end_position[0]), min(self.start_position[1], self.end_position[1]), abs(self.end_position[0] - self.start_position[0]), abs(self.end_position[1] - self.start_position[1]), self, self.elasticity, number))
+                if abs(self.end_position[0] - self.start_position[0]) or abs(self.end_position[1] - self.start_position[1]) > 0:
+                    self.players.append(Block(min(self.start_position[0], self.end_position[0]), min(self.start_position[1], self.end_position[1]), abs(self.end_position[0] - self.start_position[0]), abs(self.end_position[1] - self.start_position[1]), self, self.elasticity, number))
                 self.creating = False
 
 
@@ -243,6 +244,13 @@ class Game:
             
             self.create_delete_block()
             
+            # Fixes block overlap slightly. Better option would be to implement a more robust collision resolution system
+            if self.move_up == True:
+                for player in self.players:
+                    player.y -= 0.1
+                self.move_up = False
+            
+            
             block_distances = self.winwidth + self.winheight
             if self.is_grabbing == False:
                 closest_block = None
@@ -250,7 +258,6 @@ class Game:
                     if block_distances > player.get_location_of_block_from_mouse():
                         block_distances = player.get_location_of_block_from_mouse()
                         closest_block = player
-                
             for player in self.players:
                 player.update()
                 player.draw(self.screen)
