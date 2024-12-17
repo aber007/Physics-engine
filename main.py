@@ -33,11 +33,22 @@ class Block:
         pg.draw.rect(screen, self.color, (self.x, self.y, self.width, self.height))
 
     def update(self):
-        self.vy += self.parent.gravity
+
+        block_underneath = self.check_for_collision_with_block()
+        
+        if block_underneath == False:
+            self.vy += self.parent.gravity
+        else:
+            if self.vy > 0.01:  # If falling, allow bounce
+                self.vy = -self.vy * self.eslasticity
+            else:  # If resting, do not override velocities from collision handling
+                self.vy *= 0.5  # Slight damping to simulate rest without full stop
+                self.vx *= self.parent.friction
+                return
+
+
         self.y += self.vy
         self.x += self.vx
-
-
         # Check for collision with the ground
         if self.y > self.parent.winheight - self.height:
             self.y = self.parent.winheight - self.height
@@ -94,17 +105,17 @@ class Block:
             return "right"
         
     def fix_overlap(self, player, closest_side):
-        overlap_threshold = 0.1  # Small threshold to prevent overlap from recurring
+
         if closest_side == "top":
-            self.y = player.bottom + overlap_threshold
+            self.y = player.bottom
             self.vy = max(self.vy, 0)  # Prevent downward velocity after correction
         elif closest_side == "bottom":
-            self.y = player.top - self.height - overlap_threshold
+            self.y = player.top - self.height
             self.vy = min(self.vy, 0)  # Prevent upward velocity after correction
         elif closest_side == "left":
-            self.x = player.right + overlap_threshold
+            self.x = player.right
         elif closest_side == "right":
-            self.x = player.left - self.width - overlap_threshold
+            self.x = player.left - self.width
     
     def energy_transfer(self, player, closest_side):
         # Relative velocity components
@@ -122,6 +133,7 @@ class Block:
         # Calculate the normal velocity (velocity along the collision normal)
         normal_velocity = relative_vx * normal_x + relative_vy * normal_y
 
+
         # No collision if normal velocity is not directed toward the other object
         if normal_velocity >= 0:
             return
@@ -135,6 +147,9 @@ class Block:
 
         # Impulse magnitude (using 1D collision formula along the normal)
         impulse = -(1 + e) * normal_velocity / (1 / m1 + 1 / m2)
+
+        console.print(f"impulse: {impulse}")
+        console.print(f"relative_vy: {relative_vy}")
 
         # Update velocities along the normal direction
         self.vx += (impulse * normal_x) / m1
@@ -152,6 +167,9 @@ class Block:
                     # Get closest side of block
                     closest_side = self.get_closest_side(player)
                     self.energy_transfer(player, closest_side)
+                    if closest_side == "top" or closest_side == "bottom":
+                        return True
+        return False
                 
 
     def get_location_of_block_from_mouse(self):
@@ -169,6 +187,7 @@ class Block:
                 if line_length > 150:
                     self.vx -= ((self.x + self.width/2 - self.parent.get_mouse_pos()[0]) / 10) * (self.eslasticity / 2)
                     self.vy -= ((self.y + self.width/2 - self.parent.get_mouse_pos()[1]) / 10) * (self.eslasticity / 2)
+                    self.check_for_collision_with_block()
             else:
                 self.air_resistance = 0.995
         else:
@@ -193,7 +212,7 @@ class Game:
         
         self.gravity = 0.5
         self.friction = 1
-        self.air_resistance = 0.995
+        self.air_resistance = 1
         self.elasticity = 0.8
 
         self.players = [Block(375, 0, 50, 50, self, self.elasticity)]
@@ -227,8 +246,10 @@ class Game:
                 pg.draw.rect(self.screen, (0, 255, 255), (min(self.start_position[0], self.end_position[0]), min(self.start_position[1], self.end_position[1]), abs(self.end_position[0] - self.start_position[0]), abs(self.end_position[1] - self.start_position[1])))
             elif pg.mouse.get_pressed()[2] == False and self.creating == True:
                 number = len(self.players)
-                if abs(self.end_position[0] - self.start_position[0]) or abs(self.end_position[1] - self.start_position[1]) > 0:
-                    self.players.append(Block(min(self.start_position[0], self.end_position[0]), min(self.start_position[1], self.end_position[1]), abs(self.end_position[0] - self.start_position[0]), abs(self.end_position[1] - self.start_position[1]), self, self.elasticity, number))
+                if abs(self.end_position[0] - self.start_position[0]) == 0 or abs(self.end_position[1] - self.start_position[1]) == 0:
+                    self.end_position = (self.start_position[0] + 50, self.start_position[1] + 50)
+
+                self.players.append(Block(min(self.start_position[0], self.end_position[0]), min(self.start_position[1], self.end_position[1]), abs(self.end_position[0] - self.start_position[0]), abs(self.end_position[1] - self.start_position[1]), self, self.elasticity, number))
                 self.creating = False
 
 
