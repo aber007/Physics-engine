@@ -185,9 +185,13 @@ class Block:
                 self.air_resistance = 0.99
                 pg.draw.line(self.parent.screen, (0, 0, 0), (self.x + self.width/2, self.y + self.height/2), self.parent.get_mouse_pos(), 2)
                 if line_length > 150:
-                    self.vx -= ((self.x + self.width/2 - self.parent.get_mouse_pos()[0]) / 10) * (self.eslasticity / 2)
-                    self.vy -= ((self.y + self.width/2 - self.parent.get_mouse_pos()[1]) / 10) * (self.eslasticity / 2)
-                    self.check_for_collision_with_block()
+                    # Rope behavior based on elasticity
+                    stretch_x = (self.x + self.width / 2 - self.parent.get_mouse_pos()[0]) / line_length
+                    stretch_y = (self.y + self.height / 2 - self.parent.get_mouse_pos()[1]) / line_length
+                    force = (line_length - 150) * self.parent.rope_elasticity
+                    self.vx -= force * stretch_x
+                    self.vy -= force * stretch_y
+                    
             else:
                 self.air_resistance = 0.995
         else:
@@ -210,9 +214,10 @@ class Game:
         self.is_grabbing = False
         self.move_up = False
         
+        self.rope_elasticity = 0.1
         self.gravity = 0.5
-        self.friction = 1
-        self.air_resistance = 1
+        self.friction = 0.8
+        self.air_resistance = 0.995
         self.elasticity = 0.8
 
         self.players = [Block(375, 0, 50, 50, self, self.elasticity)]
