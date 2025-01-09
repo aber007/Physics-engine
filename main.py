@@ -148,8 +148,6 @@ class Block:
         # Impulse magnitude (using 1D collision formula along the normal)
         impulse = -(1 + e) * normal_velocity / (1 / m1 + 1 / m2)
 
-        console.print(f"impulse: {impulse}")
-        console.print(f"relative_vy: {relative_vy}")
 
         # Update velocities along the normal direction
         self.vx += (impulse * normal_x) / m1
