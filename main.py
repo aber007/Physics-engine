@@ -2,6 +2,7 @@ import pygame as pg
 import sys
 import math
 from rich.console import Console
+from pygame.math import Vector2
 
 console = Console()
 
@@ -28,9 +29,19 @@ class Block:
         self.kinetic_energy = 1/2 * self.mass * (self.vx**2 + self.vy**2)
         self.potential_energy = self.mass * self.parent.gravity * self.y
 
+        self.angular_velocity = 0
+        self.moment_of_inertia = (1 / 12) * self.mass * (self.width**2 + self.height**2)
+        self.angle = 0
 
     def draw(self, screen):
-        pg.draw.rect(screen, self.color, (self.x, self.y, self.width, self.height))
+    # Draw the rotated block
+        rect = pg.Rect(0, 0, self.width, self.height)
+        rect.center = (self.x + self.width / 2, self.y + self.height / 2)
+        rotated_image = pg.Surface((self.width, self.height), pg.SRCALPHA)
+        rotated_image.fill(self.color)
+        rotated_image = pg.transform.rotate(rotated_image, math.degrees(self.angle))
+        rotated_rect = rotated_image.get_rect(center=rect.center)
+        screen.blit(rotated_image, rotated_rect.topleft)
 
     def update(self):
 
@@ -148,7 +159,6 @@ class Block:
         # Impulse magnitude (using 1D collision formula along the normal)
         impulse = -(1 + e) * normal_velocity / (1 / m1 + 1 / m2)
 
-
         # Update velocities along the normal direction
         self.vx += (impulse * normal_x) / m1
         self.vy += (impulse * normal_y) / m1
@@ -165,6 +175,8 @@ class Block:
                     # Get closest side of block
                     closest_side = self.get_closest_side(player)
                     self.energy_transfer(player, closest_side)
+                    self.get_roation_angle()
+                    self.angle += self.angular_velocity / 60
                     if closest_side == "top" or closest_side == "bottom":
                         return True
         return False
@@ -174,6 +186,65 @@ class Block:
         x, y = self.parent.get_mouse_pos()
         return math.sqrt((x - self.x-(self.width/2))**2 + (y - self.y-(self.height/2))**2)
     
+    
+    def get_roation_angle(self):
+        support_point = self.get_support_point()
+        if support_point is None:
+            print("No support found")
+            return
+        rotation = self.should_rotate(support_point)
+        console.print(rotation[0])
+        if rotation[0]:
+            torque = self.calculate_torque(support_point)
+            self.angular_velocity += torque / self.moment_of_inertia * rotation[1]
+        else:
+            self.angular_velocity *= 0.98  # Apply damping if no rotation needed
+
+    
+    def should_rotate(self, support_point):
+        center_of_mass_x = self.x + self.width / 2  # Center of mass x-coordinate
+        support_left = support_point[0]  # Left edge of the support block
+        support_right = support_point[0] + self.parent.players[0].width  # Right edge of the support block
+
+        # Check if the center of mass is outside the bounds of the support block
+        if center_of_mass_x < support_left:
+            return True, 1  # Rotate counterclockwise
+        elif center_of_mass_x > support_right:
+            return True, -1  # Rotate clockwise
+        else:
+            return False, 0  # No rotation needed
+
+
+
+        
+    
+    def get_support_point(self):
+        for player in self.parent.players:
+            if player != self:
+                # Check vertical alignment
+                if abs(self.bottom - player.top) < 1:  # Allow small tolerance
+                    # Check horizontal overlap
+                    if self.right > player.left and self.left < player.right:
+                        # Return the closest edge and the supporting block
+                        if self.x + self.width / 2 < player.x + player.width / 2:
+                            return (player.left, player.top, player.width)
+                        else:
+                            return (player.right, player.top, player.width)
+        return None  # No support point found
+
+
+
+    
+    def calculate_torque(self, support_point):
+        # Calculate torque based on the center of mass relative to the support point
+        center_of_mass = Vector2(self.x + self.width / 2, self.y + self.height / 2)
+        lever_arm = Vector2(support_point[0], support_point[1]) - center_of_mass
+        force = Vector2(0, self.mass * self.parent.gravity)  # Force due to gravity
+        return lever_arm.cross(force)  # Torque = lever_arm × force
+
+        
+    
+
     def grab(self):
         if pg.mouse.get_pressed()[0]:    
             self.parent.is_grabbing = True
