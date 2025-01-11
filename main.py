@@ -8,27 +8,110 @@ console = Console()
 
 class Fancy_Block:
     def __init__(self, x, y, width, height, parent=None, elasticity=0.8, player_no=0):
-        self.parent : Game = parent
-        self.ne = Block(x+width, y, 10, 10, self.parent, elasticity)
-        self.nw = Block(x, y, 10, 10, self.parent, elasticity)
-        self.se = Block(x+width, y+height, 10, 10, self.parent, elasticity)
-        self.sw = Block(x, y+height, 10, 10, self.parent, elasticity)
+        self.parent: Game = parent
+        self.x = x  # Top-left corner of the Fancy_Block
+        self.y = y
         self.width = width
         self.height = height
+        self.rigidness = 0.5
+
+        self.mass = self.width * self.height
+        
+        self.ne = Block(x + width, y, 0, 0, self.parent, elasticity, player_no, self)
+        self.nw = Block(x, y, 0, 0, self.parent, elasticity, player_no, self)
+        self.se = Block(x + width, y + height, 0, 0, self.parent, elasticity, player_no, self)
+        self.sw = Block(x, y + height, 0, 0, self.parent, elasticity, player_no, self)
+        self.parent.players.append(self.ne)
+        self.parent.players.append(self.nw)
+        self.parent.players.append(self.se)
+        self.parent.players.append(self.sw)
+
+        self.kinetic_energy = 1/2 * self.mass * (self.ne.vx**2 + self.ne.vy**2)
+        self.potential_energy = self.mass * self.parent.gravity * self.y
+
+        self.angular_velocity = 0
+        self.moment_of_inertia = (1 / 12) * self.mass * (self.width**2 + self.height**2)
+        self.angle = 0
+
+
 
     def draw(self, screen):
-        self.ne.draw(screen)
-        self.nw.draw(screen)
-        self.se.draw(screen)
-        self.sw.draw(screen)
+        # Enforce distance constraints between sub-blocks
+        self.force_distance_between()
+
+        # Update the Fancy_Block's position
+        self.update_position()
+
+        # Update the positions of each block
         self.ne.update(True, self.nw, self.se, self.width, self.height)
         self.nw.update(True, self.ne, self.sw, self.width, self.height)
         self.se.update(True, self.sw, self.ne, self.width, self.height)
-        self.sw.update(True, self.se, self.nw, self.width ,self.height)
+        self.sw.update(True, self.se, self.nw, self.width, self.height)
+
+        # Draw the Fancy_Block
+        pg.draw.polygon(screen, (0, 128, 255), [(self.nw.x, self.nw.y), (self.ne.x, self.ne.y), (self.se.x, self.se.y), (self.sw.x, self.sw.y)])
+
+
+
+
+    def update_position(self):
+        """
+        Updates the Fancy_Block's position based on the average position of its sub-blocks.
+        """
+        self.x = (self.nw.x + self.ne.x + self.sw.x + self.se.x) / 4
+        self.y = (self.nw.y + self.ne.y + self.sw.y + self.se.y) / 4
+
+
+    
+    def force_distance_between(self):
+        """
+        Enforces the correct distances between the sub-blocks to maintain the square.
+        """
+        # Define the pairs of blocks and the expected distances
+        pairs = [
+            (self.nw, self.ne, self.width),  # Top edge
+            (self.nw, self.sw, self.height),  # Left edge
+            (self.ne, self.se, self.height),  # Right edge
+            (self.sw, self.se, self.width),  # Bottom edge
+            (self.nw, self.se, math.sqrt(self.width**2 + self.height**2)),  # Diagonal
+            (self.ne, self.sw, math.sqrt(self.width**2 + self.height**2)),  # Diagonal
+        ]
+
+        for block1, block2, target_distance in pairs:
+            # Calculate the current distance between the blocks
+            dx = block2.x - block1.x
+            dy = block2.y - block1.y
+            current_distance = math.sqrt(dx**2 + dy**2)
+
+            # Skip if the blocks are already at the correct distance
+            if current_distance == 0 or current_distance == target_distance:
+                continue
+
+            # Calculate the correction needed
+            correction = (current_distance - target_distance) / 2
+            correction_dx = correction * (dx / current_distance)
+            correction_dy = correction * (dy / current_distance)
+
+            # Apply corrections symmetrically to the blocks
+            block1.x += correction_dx
+            block1.y += correction_dy
+            block2.x -= correction_dx
+            block2.y -= correction_dy
+
+            # Adjust velocities to match the correction (damping effect)
+            block1.vx += correction_dx * self.rigidness
+            block1.vy += correction_dy * self.rigidness
+            block2.vx -= correction_dx * self.rigidness
+            block2.vy -= correction_dy * self.rigidness
+
+
+
+
+
 
 
 class Block:
-    def __init__(self, x, y, width, height, parent=None, elasticity=0.8, player_no=0):
+    def __init__(self, x, y, width, height, parent=None, elasticity=0.8, player_no=0, fancy_parent=None):
         self.parent : Game = parent
         self.width = width
         self.height = height
@@ -41,12 +124,17 @@ class Block:
         self.vy = 0
         self.eslasticity = elasticity
 
+        self.fancy_parent : Fancy_Block = fancy_parent
+
         self.top = self.y
         self.bottom = self.y + self.height
         self.left = self.x
         self.right = self.x + self.width
 
-        self.mass = self.width * self.height
+        if self.width == 0 or self.height == 0:
+            self.mass = self.fancy_parent.mass
+        else:
+            self.mass = self.width * self.height
         self.kinetic_energy = 1/2 * self.mass * (self.vx**2 + self.vy**2)
         self.potential_energy = self.mass * self.parent.gravity * self.y
 
@@ -64,22 +152,10 @@ class Block:
         rotated_rect = rotated_image.get_rect(center=rect.center)
         screen.blit(rotated_image, rotated_rect.topleft)
 
-    def force_distance_between(self, fancy_block_width , fancy_blocky_height, fancy_width : int, fancy_height: int):
-        """Creates a large block made of of four smaller blocks that will keep a distance between them"""
-        height_difference = abs(self.y - fancy_blocky_height.y)
-        width_difference = abs(self.x - fancy_block_width.x)
         
-        if height_difference != fancy_height:
-            fancy_blocky_height.y = self.y + fancy_height
-        if width_difference != fancy_width:
-            fancy_block_width.x = self.x + fancy_width
-
-        print(f"Height difference: {height_difference}, Width difference: {width_difference}")
+        
     
     def update(self, fancy=False, fancy_block_width=None, fancy_block_height=None, fancy_width=None, fancy_height=None):
-
-        if fancy:
-            self.force_distance_between(fancy_block_width, fancy_block_height, fancy_width, fancy_height)
 
         block_underneath = self.check_for_collision_with_block()
         
@@ -188,6 +264,9 @@ class Block:
         # Effective mass for collision response
         m1 = self.mass
         m2 = player.mass
+
+        if m1 == 0 or m2 == 0:
+            console.print("Mass is zero", style="bold red")
 
         # Elasticity factor (average elasticity of both objects)
         e = (self.eslasticity + player.eslasticity) / 2
@@ -304,7 +383,10 @@ class Game:
                 if abs(self.end_position[0] - self.start_position[0]) == 0 or abs(self.end_position[1] - self.start_position[1]) == 0:
                     self.end_position = (self.start_position[0] + 50, self.start_position[1] + 50)
 
-                self.players.append(Block(min(self.start_position[0], self.end_position[0]), min(self.start_position[1], self.end_position[1]), abs(self.end_position[0] - self.start_position[0]), abs(self.end_position[1] - self.start_position[1]), self, self.elasticity, number))
+                if pg.key.get_pressed()[pg.K_LSHIFT]:
+                    self.fancy_players.append(Fancy_Block(min(self.start_position[0], self.end_position[0]), min(self.start_position[1], self.end_position[1]), abs(self.end_position[0] - self.start_position[0]), abs(self.end_position[1] - self.start_position[1]), self, self.elasticity, number))
+                else:
+                    self.players.append(Block(min(self.start_position[0], self.end_position[0]), min(self.start_position[1], self.end_position[1]), abs(self.end_position[0] - self.start_position[0]), abs(self.end_position[1] - self.start_position[1]), self, self.elasticity, number))
                 self.creating = False
 
 
@@ -344,7 +426,7 @@ class Game:
                 
 
             pg.display.flip()
-            self.clock.tick(1)
+            self.clock.tick(60)
 
         pg.quit()
         sys.exit()
