@@ -6,6 +6,27 @@ from pygame.math import Vector2
 
 console = Console()
 
+class Fancy_Block:
+    def __init__(self, x, y, width, height, parent=None, elasticity=0.8, player_no=0):
+        self.parent : Game = parent
+        self.ne = Block(x+width, y, 10, 10, self.parent, elasticity)
+        self.nw = Block(x, y, 10, 10, self.parent, elasticity)
+        self.se = Block(x+width, y+height, 10, 10, self.parent, elasticity)
+        self.sw = Block(x, y+height, 10, 10, self.parent, elasticity)
+        self.width = width
+        self.height = height
+
+    def draw(self, screen):
+        self.ne.draw(screen)
+        self.nw.draw(screen)
+        self.se.draw(screen)
+        self.sw.draw(screen)
+        self.ne.update(True, self.nw, self.se, self.width, self.height)
+        self.nw.update(True, self.ne, self.sw, self.width, self.height)
+        self.se.update(True, self.sw, self.ne, self.width, self.height)
+        self.sw.update(True, self.se, self.nw, self.width ,self.height)
+
+
 class Block:
     def __init__(self, x, y, width, height, parent=None, elasticity=0.8, player_no=0):
         self.parent : Game = parent
@@ -43,7 +64,22 @@ class Block:
         rotated_rect = rotated_image.get_rect(center=rect.center)
         screen.blit(rotated_image, rotated_rect.topleft)
 
-    def update(self):
+    def force_distance_between(self, fancy_block_width , fancy_blocky_height, fancy_width : int, fancy_height: int):
+        """Creates a large block made of of four smaller blocks that will keep a distance between them"""
+        height_difference = abs(self.y - fancy_blocky_height.y)
+        width_difference = abs(self.x - fancy_block_width.x)
+        
+        if height_difference != fancy_height:
+            fancy_blocky_height.y = self.y + fancy_height
+        if width_difference != fancy_width:
+            fancy_block_width.x = self.x + fancy_width
+
+        print(f"Height difference: {height_difference}, Width difference: {width_difference}")
+    
+    def update(self, fancy=False, fancy_block_width=None, fancy_block_height=None, fancy_width=None, fancy_height=None):
+
+        if fancy:
+            self.force_distance_between(fancy_block_width, fancy_block_height, fancy_width, fancy_height)
 
         block_underneath = self.check_for_collision_with_block()
         
@@ -175,7 +211,6 @@ class Block:
                     # Get closest side of block
                     closest_side = self.get_closest_side(player)
                     self.energy_transfer(player, closest_side)
-                    self.get_roation_angle()
                     self.angle += self.angular_velocity / 60
                     if closest_side == "top" or closest_side == "bottom":
                         return True
@@ -185,62 +220,6 @@ class Block:
     def get_location_of_block_from_mouse(self):
         x, y = self.parent.get_mouse_pos()
         return math.sqrt((x - self.x-(self.width/2))**2 + (y - self.y-(self.height/2))**2)
-    
-    
-    def get_roation_angle(self):
-        support_point = self.get_support_point()
-        if support_point is None:
-            print("No support found")
-            return
-        rotation = self.should_rotate(support_point)
-        console.print(rotation[0])
-        if rotation[0]:
-            torque = self.calculate_torque(support_point)
-            self.angular_velocity += torque / self.moment_of_inertia * rotation[1]
-        else:
-            self.angular_velocity *= 0.98  # Apply damping if no rotation needed
-
-    
-    def should_rotate(self, support_point):
-        center_of_mass_x = self.x + self.width / 2  # Center of mass x-coordinate
-        support_left = support_point[0]  # Left edge of the support block
-        support_right = support_point[0] + self.parent.players[0].width  # Right edge of the support block
-
-        # Check if the center of mass is outside the bounds of the support block
-        if center_of_mass_x < support_left:
-            return True, 1  # Rotate counterclockwise
-        elif center_of_mass_x > support_right:
-            return True, -1  # Rotate clockwise
-        else:
-            return False, 0  # No rotation needed
-
-
-
-        
-    
-    def get_support_point(self):
-        for player in self.parent.players:
-            if player != self:
-                # Check vertical alignment
-                if abs(self.bottom - player.top) < 1:  # Allow small tolerance
-                    # Check horizontal overlap
-                    if self.right > player.left and self.left < player.right:
-                        # Return the closest edge and the supporting block
-                        if self.x + self.width / 2 < player.x + player.width / 2:
-                            return (player.left, player.top, player.width)
-                        else:
-                            return (player.right, player.top, player.width)
-        return None  # No support point found
-
-
-
-    
-    def calculate_torque(self, support_point):
-        # Calculate torque based on the center of mass relative to the support point
-        center_of_mass = Vector2(self.x + self.width / 2, self.y + self.height / 2)
-        lever_arm = Vector2(support_point[0], support_point[1]) - center_of_mass
-        force = Vector2(0, self.mass * self.parent.gravity)  # Force due to gravity
-        return lever_arm.cross(force)  # Torque = lever_arm × force
 
         
     
@@ -290,6 +269,8 @@ class Game:
         self.elasticity = 0.8
 
         self.players = [Block(375, 0, 50, 50, self, self.elasticity)]
+        self.fancy_players = [Fancy_Block(375, 0, 50, 50, self, self.elasticity)]
+        #place fancy block
     def get_mouse_pos(self):
         x, y = pg.mouse.get_pos()
         return x, y
@@ -342,7 +323,7 @@ class Game:
             # Fixes block overlap slightly. Better option would be to implement a more robust collision resolution system
             if self.move_up == True:
                 for player in self.players:
-                    player.y -= 0.1
+                    player.y -= 0.01
                 self.move_up = False
             
             
@@ -358,9 +339,12 @@ class Game:
                 player.draw(self.screen)
                 if closest_block == player:
                     player.grab()
+            for fancy_block in self.fancy_players:
+                fancy_block.draw(self.screen)
+                
 
             pg.display.flip()
-            self.clock.tick(60)
+            self.clock.tick(1)
 
         pg.quit()
         sys.exit()
