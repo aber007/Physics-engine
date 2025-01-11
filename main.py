@@ -9,7 +9,7 @@ console = Console()
 class Fancy_Block:
     def __init__(self, x, y, width, height, parent=None, elasticity=0.8, player_no=0):
         self.parent: Game = parent
-        self.x = x  # Top-left corner of the Fancy_Block
+        self.x = x 
         self.y = y
         self.width = width
         self.height = height
@@ -38,9 +38,9 @@ class Fancy_Block:
     def draw(self, screen):
         # Enforce distance constraints between sub-blocks
         self.force_distance_between()
-
-        # Update the Fancy_Block's position
         self.update_position()
+
+        self.check_for_collision(self.parent.players)
 
         # Update the positions of each block
         self.ne.update(True, self.nw, self.se, self.width, self.height)
@@ -48,7 +48,7 @@ class Fancy_Block:
         self.se.update(True, self.sw, self.ne, self.width, self.height)
         self.sw.update(True, self.se, self.nw, self.width, self.height)
 
-        # Draw the Fancy_Block
+
         pg.draw.polygon(screen, (0, 128, 255), [(self.nw.x, self.nw.y), (self.ne.x, self.ne.y), (self.se.x, self.se.y), (self.sw.x, self.sw.y)])
 
 
@@ -62,6 +62,48 @@ class Fancy_Block:
         self.y = (self.nw.y + self.ne.y + self.sw.y + self.se.y) / 4
 
 
+    def check_for_collision(self, other_blocks):
+        """
+        Check for collisions between the entire Fancy_Block and other blocks.
+        """
+        # Define the Fancy_Block's rectangle
+        fancy_rect = pg.Rect(self.x, self.y, self.width, self.height)
+
+        for block in other_blocks:
+            # Skip self-collision
+            if block in [self.nw, self.ne, self.sw, self.se]:
+                continue
+
+            # Define the other block's rectangle
+            block_rect = pg.Rect(block.x, block.y, block.width, block.height)
+
+            # Check for collision
+            if fancy_rect.colliderect(block_rect):
+                # Handle collision response
+                self.handle_collision_response(block)
+                return True  # Exit after the first collision
+        return False
+    
+    def handle_collision_response(self, other_block):
+        """
+        Apply collision response for the Fancy_Block as a whole.
+        """
+        # Determine the side of collision (simplified for rectangles)
+        if self.y + self.height <= other_block.y:  # Collision from the top
+            self.y = other_block.y - self.height
+            self.vy = -self.vy * self.elasticity
+        elif self.y >= other_block.y + other_block.height:  # Collision from below
+            self.y = other_block.y + other_block.height
+            self.vy = -self.vy * self.elasticity
+        elif self.x + self.width <= other_block.x:  # Collision from the left
+            self.x = other_block.x - self.width
+            self.vx = -self.vx * self.elasticity
+        elif self.x >= other_block.x + other_block.width:  # Collision from the right
+            self.x = other_block.x + other_block.width
+            self.vx = -self.vx * self.elasticity
+
+
+    
     
     def force_distance_between(self):
         """
@@ -99,6 +141,7 @@ class Fancy_Block:
             block2.y -= correction_dy
 
             # Adjust velocities to match the correction (damping effect)
+
             block1.vx += correction_dx * self.rigidness
             block1.vy += correction_dy * self.rigidness
             block2.vx -= correction_dx * self.rigidness
@@ -159,6 +202,7 @@ class Block:
 
         block_underneath = self.check_for_collision_with_block()
         
+        
         if block_underneath == False:
             self.vy += self.parent.gravity
         else:
@@ -210,6 +254,7 @@ class Block:
             self.vx *= self.parent.friction
         else:
             self.vx *= self.parent.air_resistance
+
 
     def get_closest_side(self, player):
         top = abs(self.top - player.bottom)
@@ -348,7 +393,7 @@ class Game:
         self.elasticity = 0.8
 
         self.players = [Block(375, 0, 50, 50, self, self.elasticity)]
-        self.fancy_players = [Fancy_Block(375, 0, 50, 50, self, self.elasticity)]
+        self.fancy_players = []
         #place fancy block
     def get_mouse_pos(self):
         x, y = pg.mouse.get_pos()
@@ -369,6 +414,11 @@ class Game:
                 for player in self.players:
                     if player.x < self.start_position[0] < player.x + player.width and player.y < self.start_position[1] < player.y + player.height:
                         self.players.remove(player)
+                        self.waitforrelease = True
+                        return
+                for fancy_player in self.fancy_players:
+                    if fancy_player.x < self.start_position[0] < fancy_player.x + fancy_player.width and fancy_player.y < self.start_position[1] < fancy_player.y + fancy_player.height:
+                        self.fancy_players.remove(fancy_player)
                         self.waitforrelease = True
                         return
 
