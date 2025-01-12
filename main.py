@@ -7,13 +7,13 @@ from pygame.math import Vector2
 console = Console()
 
 class Fancy_Block:
-    def __init__(self, x, y, width, height, parent=None, elasticity=0.8, player_no=0):
+    def __init__(self, x, y, width, height, parent=None, elasticity=0.8, player_no=0, rigidness = 0.5):
         self.parent: Game = parent
         self.x = x 
         self.y = y
         self.width = width
         self.height = height
-        self.rigidness = 0.5
+        self.rigidness = rigidness
 
         self.mass = self.width * self.height
         
@@ -37,6 +37,8 @@ class Fancy_Block:
 
     def draw(self, screen):
         # Enforce distance constraints between sub-blocks
+        self.rigidness = self.parent.rigidness
+        
         self.force_distance_between()
         self.update_position()
 
@@ -371,6 +373,12 @@ class Block:
             self.line = False
             self.air_resistance = 0.995
 
+import pygame as pg
+import sys
+import tkinter as tk
+from tkinter import ttk
+from threading import Thread
+
 class Game:
     def __init__(self):
         pg.init()
@@ -385,16 +393,78 @@ class Game:
         self.waitforrelease = False
         self.is_grabbing = False
         self.move_up = False
-        
+
+        # Simulation parameters
         self.rope_elasticity = 0.1
         self.gravity = 0.5
         self.friction = 0.8
         self.air_resistance = 0.995
         self.elasticity = 0.8
+        self.rigidness = 0.5
 
         self.players = [Block(375, 0, 50, 50, self, self.elasticity)]
         self.fancy_players = []
-        #place fancy block
+
+    def open_settings_window(self):
+        """
+        Opens the settings window using tkinter.
+        """
+        def update_parameter(param_name, value, entry : tk.Entry):
+            """
+            Updates the game parameter with the slider/input value.
+            """
+            setattr(self, param_name, float(value))
+            entry.insert(0, str(round(getattr(self, param_name), ndigits=3)))
+
+        def create_slider(parent, label, param_name, from_, to_, resolution):
+            """
+            Creates a labeled slider for adjusting a parameter.
+            """
+            frame = tk.Frame(parent)
+            frame.pack(fill="x", pady=5)
+
+            entry = tk.Entry(frame, width=8)
+            tk.Label(frame, text=label, width=20, anchor="w").pack(side="left", padx=5)
+            slider = ttk.Scale(
+                frame,
+                from_=from_,
+                to=to_,
+                orient="horizontal",
+                length=200,
+                command=lambda value, name=param_name: update_parameter(name, value, entry),
+            )
+            slider.set(getattr(self, param_name))
+            slider.pack(side="left", padx=5)
+
+            entry.insert(0, str(round(getattr(self, param_name), ndigits=3)))
+            entry.pack(side="left", padx=5)
+
+            def update_from_entry(event):
+                try:
+                    value = float(entry.get())
+                    if value > to_:
+                        slider.set(to_)
+                    update_parameter(param_name, value, entry)
+                except ValueError:
+                    entry.delete(0, tk.END)
+                    entry.insert(0, str(round(getattr(self, param_name), ndigits=3)))
+
+            entry.bind("<Return>", update_from_entry)
+
+        # Create the tkinter window
+        settings_window = tk.Tk()
+        settings_window.title("Game Settings")
+
+        # Add sliders for each parameter
+        create_slider(settings_window, "Rope Elasticity", "rope_elasticity", 0, 1, 0.01)
+        create_slider(settings_window, "Gravity", "gravity", 0, 2, 0.01)
+        create_slider(settings_window, "Friction", "friction", 0, 1, 0.01)
+        create_slider(settings_window, "Air Resistance", "air_resistance", 0, 1, 0.001)
+        create_slider(settings_window, "Elasticity", "elasticity", 0, 1, 0.01)
+        create_slider(settings_window, "Rigidness", "rigidness", 0, 1, 0.01)
+
+        settings_window.mainloop()
+
     def get_mouse_pos(self):
         x, y = pg.mouse.get_pos()
         return x, y
@@ -416,9 +486,9 @@ class Game:
                         self.players.remove(player)
                         self.waitforrelease = True
                         return
-                for fancy_player in self.fancy_players:
-                    if fancy_player.x < self.start_position[0] < fancy_player.x + fancy_player.width and fancy_player.y < self.start_position[1] < fancy_player.y + fancy_player.height:
-                        self.fancy_players.remove(fancy_player)
+                for player in self.fancy_players:
+                    if player.x < self.start_position[0] < player.x + player.width and player.y < self.start_position[1] < player.y + player.height:
+                        self.fancy_players.remove(player)
                         self.waitforrelease = True
                         return
 
@@ -438,18 +508,23 @@ class Game:
                 else:
                     self.players.append(Block(min(self.start_position[0], self.end_position[0]), min(self.start_position[1], self.end_position[1]), abs(self.end_position[0] - self.start_position[0]), abs(self.end_position[1] - self.start_position[1]), self, self.elasticity, number))
                 self.creating = False
-
-
-    
     
     def run(self):
+        def run_settings_thread():
+            """
+            Runs the tkinter settings window in a separate thread.
+            """
+            Thread(target=self.open_settings_window, daemon=True).start()
+
         while not self.done:
             for event in pg.event.get():
                 if event.type == pg.QUIT:
                     self.done = True
-            
+                elif event.type == pg.KEYDOWN and event.key == pg.K_ESCAPE:
+                    run_settings_thread()
+
             self.screen.fill((255, 255, 255))
-            
+
             self.create_delete_block()
             
             # Fixes block overlap slightly. Better option would be to implement a more robust collision resolution system
@@ -473,7 +548,6 @@ class Game:
                     player.grab()
             for fancy_block in self.fancy_players:
                 fancy_block.draw(self.screen)
-                
 
             pg.display.flip()
             self.clock.tick(60)
