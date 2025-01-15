@@ -1,7 +1,7 @@
-**Pygame based physics engine for simple simulations**  
+**Pygame-based physics engine for simple simulations**  
   
-Controls:  
+<ins>Controls:</ins>  
   LMB - click and hold near blocks to move them  
-  RMB - click or hold to create blocks. click on existing block to delete  
-  Shift + RMB - click or hold to create blocks with ragdoll physics. click on existing block to delete (WIP)  
+  RMB - click or hold to create blocks. click on an existing block to delete  
+  Shift + RMB - click or hold to create blocks with ragdoll physics. click on an existing block to delete (WIP)  
   ESC - Open settings  
