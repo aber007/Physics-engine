@@ -7,113 +7,6 @@ from pygame.math import Vector2
 
 console = Console()
 
-class Fancy_Block:
-    def __init__(self, x, y, width, height, parent=None, elasticity=0.8, player_no=0, rigidness = 0.5):
-        self.parent: Game = parent
-        self.x = x 
-        self.y = y
-        self.width = width
-        self.height = height
-        self.rigidness = rigidness
-
-        self.mass = self.width * self.height
-        
-        self.ne = Block(x + width, y, 0, 0, self.parent, elasticity, player_no, self)
-        self.nw = Block(x, y, 0, 0, self.parent, elasticity, player_no, self)
-        self.se = Block(x + width, y + height, 0, 0, self.parent, elasticity, player_no, self)
-        self.sw = Block(x, y + height, 0, 0, self.parent, elasticity, player_no, self)
-        self.parent.players.append(self.ne)
-        self.parent.players.append(self.nw)
-        self.parent.players.append(self.se)
-        self.parent.players.append(self.sw)
-
-        self.kinetic_energy = 1/2 * self.mass * (self.ne.vx**2 + self.ne.vy**2)
-        self.potential_energy = self.mass * self.parent.gravity * self.y
-
-        self.angular_velocity = 0
-        self.moment_of_inertia = (1 / 12) * self.mass * (self.width**2 + self.height**2)
-        self.angle = 0
-
-
-
-    def draw(self, screen):
-        # Enforce distance constraints between sub-blocks
-        self.rigidness = self.parent.rigidness
-        
-        self.force_distance_between()
-        self.update_position()
-
-        # Update the positions of each block
-        self.ne.update(True, self.nw, self.se, self.width, self.height)
-        self.nw.update(True, self.ne, self.sw, self.width, self.height)
-        self.se.update(True, self.sw, self.ne, self.width, self.height)
-        self.sw.update(True, self.se, self.nw, self.width, self.height)
-
-
-        pg.draw.polygon(screen, (0, 128, 255), [(self.nw.x, self.nw.y), (self.ne.x, self.ne.y), (self.se.x, self.se.y), (self.sw.x, self.sw.y)])
-
-
-
-
-    def update_position(self):
-        """
-        Updates the Fancy_Block's position based on the average position of its sub-blocks.
-        """
-        self.x = (self.nw.x + self.ne.x + self.sw.x + self.se.x) / 4
-        self.y = (self.nw.y + self.ne.y + self.sw.y + self.se.y) / 4
-
-        
-        
-
-    
-    def force_distance_between(self):
-        """
-        Enforces the correct distances between the sub-blocks to maintain the square.
-        """
-        # Define the pairs of blocks and the expected distances
-        pairs = [
-            (self.nw, self.ne, self.width),  # Top edge
-            (self.nw, self.sw, self.height),  # Left edge
-            (self.ne, self.se, self.height),  # Right edge
-            (self.sw, self.se, self.width),  # Bottom edge
-            (self.nw, self.se, math.sqrt(self.width**2 + self.height**2)),  # Diagonal
-            (self.ne, self.sw, math.sqrt(self.width**2 + self.height**2)),  # Diagonal
-        ]
-
-        for block1, block2, target_distance in pairs:
-            # Calculate the current distance between the blocks
-            dx = block2.x - block1.x
-            dy = block2.y - block1.y
-            current_distance = math.sqrt(dx**2 + dy**2)
-
-            # Skip if the blocks are already at the correct distance
-            if current_distance == 0 or current_distance == target_distance:
-                continue
-
-            # Calculate the correction needed
-            correction = (current_distance - target_distance) / 2
-            correction_dx = correction * (dx / current_distance)
-            correction_dy = correction * (dy / current_distance)
-
-            # Apply corrections symmetrically to the blocks
-            block1.x += correction_dx
-            block1.y += correction_dy
-            block2.x -= correction_dx
-            block2.y -= correction_dy
-
-            # Adjust velocities to match the correction (damping effect)
-
-            block1.vx += correction_dx * self.rigidness
-            block1.vy += correction_dy * self.rigidness
-            block2.vx -= correction_dx * self.rigidness
-            block2.vy -= correction_dy * self.rigidness
-
-
-
-
-
-
-
 class Block:
     def __init__(self, x, y, width, height, parent=None, elasticity=0.8, player_no=0, fancy_parent=None):
         self.parent : Game = parent
@@ -127,8 +20,6 @@ class Block:
         self.vx = 0
         self.vy = 0
         self.eslasticity = elasticity
-
-        self.fancy_parent : Fancy_Block = fancy_parent
 
         self.top = self.y
         self.bottom = self.y + self.height
@@ -155,85 +46,6 @@ class Block:
         rotated_image = pg.transform.rotate(rotated_image, math.degrees(self.angle))
         rotated_rect = rotated_image.get_rect(center=rect.center)
         screen.blit(rotated_image, rotated_rect.topleft)
-
-    def get_hitbox(self):
-        def get_top_corner():
-            return max(self.fancy_parent.ne.y, self.fancy_parent.nw.y, self.fancy_parent.se.y, self.fancy_parent.sw.y)
-
-        def drawhitbox(x1, y1, x2, y2, screen_width, screen_height):
-            # Calculate the slope
-            if x1 == x2:  # Vertical line
-                return [(x1, 0), (x1, screen_height)]
-            elif y1 == y2:  # Horizontal line
-                return [(0, y1), (screen_width, y1)]
-            
-            slope = (y2 - y1) / (x2 - x1)
-            intercept = y1 - slope * x1
-            
-            # Calculate intersections with screen edges
-            points = []
-            # Intersection with left (x=0)
-            points.append((0, intercept))
-            # Intersection with right (x=screen_width)
-            points.append((screen_width, slope * screen_width + intercept))
-            # Intersection with top (y=0)
-            points.append((-intercept / slope, 0))
-            # Intersection with bottom (y=screen_height)
-            points.append(((screen_height - intercept) / slope, screen_height))
-            
-            # Filter points within screen boundaries
-            valid_points = [
-                (x, y) for x, y in points
-                if 0 <= x <= screen_width and 0 <= y <= screen_height
-            ]
-            
-            return valid_points
-        
-        def get_within_hitbox(x1, y1, x2, y2, current_pos):
-            """
-            Returns the function of the line passing through two points in slope-intercept form y = mx + c
-            or x = k for vertical lines.
-            """
-            if x1 == x2:  # Vertical line
-                return 1000
-            elif y1 == y2:  # Horizontal line
-                return y1
-            else:
-                # Calculate slope (m) and y-intercept (c)
-                slope = (y2 - y1) / (x2 - x1)
-                intercept = y1 - slope * x1
-                return float(slope*current_pos + intercept)
-
-        top_corner = get_top_corner()
-        eq1 = float(get_within_hitbox(self.fancy_parent.ne.x, self.fancy_parent.ne.y, self.fancy_parent.nw.x, self.fancy_parent.nw.y, self.x))
-        eq2 = float(get_within_hitbox(self.fancy_parent.ne.x, self.fancy_parent.ne.y, self.fancy_parent.se.x, self.fancy_parent.se.y, self.x))
-        eq3 = float(get_within_hitbox(self.fancy_parent.sw.x, self.fancy_parent.sw.y, self.fancy_parent.nw.x, self.fancy_parent.nw.y, self.x))
-        eq4 = float(get_within_hitbox(self.fancy_parent.sw.x, self.fancy_parent.sw.y, self.fancy_parent.se.x, self.fancy_parent.se.y, self.x))
-        
-        
-        def handle_collision():
-            print("Collision")
-            
-        
-        for block in self.parent.players:
-            if block in [self.fancy_parent.nw, self.fancy_parent.ne, self.fancy_parent.sw, self.fancy_parent.se]:
-                continue
-            if top_corner == self.fancy_parent.ne.y:
-                if (block.y <= eq1 and block.y <= eq2 and block.y >= eq3 and block.y >= eq4 and
-                    self.fancy_parent.nw.x <= block.x <= self.fancy_parent.ne.x):
-                    handle_collision()
-            if top_corner == self.fancy_parent.nw.y:
-                if (block.y <= eq1 and block.y <= eq3 and block.y >= eq2 and block.y >= eq4 and
-                    self.fancy_parent.nw.x <= block.x <= self.fancy_parent.ne.x):
-                    handle_collision()
-            if top_corner == self.fancy_parent.se.y:
-                if (block.y <= eq2 and block.y <= eq4 and block.y >= eq1 and block.y >= eq3 and
-                    self.fancy_parent.sw.x <= block.x <= self.fancy_parent.se.x):
-                    handle_collision()
-            if top_corner == self.fancy_parent.sw.y:
-                if (block.y <= eq3 and block.y <= eq4 and block.y >= eq1 and block.y >= eq2 and
-                    self.fancy_parent.sw.x <= block.x <= self.fancy_parent.se.x):
-                    handle_collision()
 
 
     
@@ -287,8 +99,6 @@ class Block:
         self.right = self.x + self.width
 
         self.check_for_collision_with_block()
-        if fancy:
-            self.get_hitbox()
 
         # Apply friction
         if self.vy == 0:
@@ -439,10 +249,8 @@ class Game:
         self.friction = 0.8
         self.air_resistance = 0.995
         self.elasticity = 0.8
-        self.rigidness = 0.5
 
         self.players = [Block(375, 0, 50, 50, self, self.elasticity)]
-        self.fancy_players = []
 
     def open_settings_window(self):
         """
@@ -525,11 +333,6 @@ class Game:
                         self.players.remove(player)
                         self.waitforrelease = True
                         return
-                for player in self.fancy_players:
-                    if player.x < self.start_position[0] < player.x + player.width and player.y < self.start_position[1] < player.y + player.height:
-                        self.fancy_players.remove(player)
-                        self.waitforrelease = True
-                        return
 
                 self.creating = True
             # Draw block when right mouse button is released
@@ -541,11 +344,7 @@ class Game:
                 number = len(self.players)
                 if abs(self.end_position[0] - self.start_position[0]) == 0 or abs(self.end_position[1] - self.start_position[1]) == 0:
                     self.end_position = (self.start_position[0] + 50, self.start_position[1] + 50)
-
-                if pg.key.get_pressed()[pg.K_LSHIFT]:
-                    self.fancy_players.append(Fancy_Block(min(self.start_position[0], self.end_position[0]), min(self.start_position[1], self.end_position[1]), abs(self.end_position[0] - self.start_position[0]), abs(self.end_position[1] - self.start_position[1]), self, self.elasticity, number))
-                else:
-                    self.players.append(Block(min(self.start_position[0], self.end_position[0]), min(self.start_position[1], self.end_position[1]), abs(self.end_position[0] - self.start_position[0]), abs(self.end_position[1] - self.start_position[1]), self, self.elasticity, number))
+                self.players.append(Block(min(self.start_position[0], self.end_position[0]), min(self.start_position[1], self.end_position[1]), abs(self.end_position[0] - self.start_position[0]), abs(self.end_position[1] - self.start_position[1]), self, self.elasticity, number))
                 self.creating = False
     
     def run(self):
@@ -585,8 +384,6 @@ class Game:
                 player.draw(self.screen)
                 if closest_block == player:
                     player.grab()
-            for fancy_block in self.fancy_players:
-                fancy_block.draw(self.screen)
 
             pg.display.flip()
             self.clock.tick(60)
