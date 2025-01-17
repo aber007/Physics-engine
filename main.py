@@ -156,86 +156,6 @@ class Block:
         rotated_rect = rotated_image.get_rect(center=rect.center)
         screen.blit(rotated_image, rotated_rect.topleft)
 
-    def get_hitbox(self):
-        def get_top_corner():
-            return max(self.fancy_parent.ne.y, self.fancy_parent.nw.y, self.fancy_parent.se.y, self.fancy_parent.sw.y)
-
-        def drawhitbox(x1, y1, x2, y2, screen_width, screen_height):
-            # Calculate the slope
-            if x1 == x2:  # Vertical line
-                return [(x1, 0), (x1, screen_height)]
-            elif y1 == y2:  # Horizontal line
-                return [(0, y1), (screen_width, y1)]
-            
-            slope = (y2 - y1) / (x2 - x1)
-            intercept = y1 - slope * x1
-            
-            # Calculate intersections with screen edges
-            points = []
-            # Intersection with left (x=0)
-            points.append((0, intercept))
-            # Intersection with right (x=screen_width)
-            points.append((screen_width, slope * screen_width + intercept))
-            # Intersection with top (y=0)
-            points.append((-intercept / slope, 0))
-            # Intersection with bottom (y=screen_height)
-            points.append(((screen_height - intercept) / slope, screen_height))
-            
-            # Filter points within screen boundaries
-            valid_points = [
-                (x, y) for x, y in points
-                if 0 <= x <= screen_width and 0 <= y <= screen_height
-            ]
-            
-            return valid_points
-        
-        def get_within_hitbox(x1, y1, x2, y2, current_pos):
-            """
-            Returns the function of the line passing through two points in slope-intercept form y = mx + c
-            or x = k for vertical lines.
-            """
-            if x1 == x2:  # Vertical line
-                return 1000
-            elif y1 == y2:  # Horizontal line
-                return y1
-            else:
-                # Calculate slope (m) and y-intercept (c)
-                slope = (y2 - y1) / (x2 - x1)
-                intercept = y1 - slope * x1
-                return float(slope*current_pos + intercept)
-
-        top_corner = get_top_corner()
-        eq1 = float(get_within_hitbox(self.fancy_parent.ne.x, self.fancy_parent.ne.y, self.fancy_parent.nw.x, self.fancy_parent.nw.y, self.x))
-        eq2 = float(get_within_hitbox(self.fancy_parent.ne.x, self.fancy_parent.ne.y, self.fancy_parent.se.x, self.fancy_parent.se.y, self.x))
-        eq3 = float(get_within_hitbox(self.fancy_parent.sw.x, self.fancy_parent.sw.y, self.fancy_parent.nw.x, self.fancy_parent.nw.y, self.x))
-        eq4 = float(get_within_hitbox(self.fancy_parent.sw.x, self.fancy_parent.sw.y, self.fancy_parent.se.x, self.fancy_parent.se.y, self.x))
-        
-        
-        def handle_collision():
-            print("Collision")
-            
-        
-        for block in self.parent.players:
-            if block in [self.fancy_parent.nw, self.fancy_parent.ne, self.fancy_parent.sw, self.fancy_parent.se]:
-                continue
-            if top_corner == self.fancy_parent.ne.y:
-                if (block.y <= eq1 and block.y <= eq2 and block.y >= eq3 and block.y >= eq4 and
-                    self.fancy_parent.nw.x <= block.x <= self.fancy_parent.ne.x):
-                    handle_collision()
-            if top_corner == self.fancy_parent.nw.y:
-                if (block.y <= eq1 and block.y <= eq3 and block.y >= eq2 and block.y >= eq4 and
-                    self.fancy_parent.nw.x <= block.x <= self.fancy_parent.ne.x):
-                    handle_collision()
-            if top_corner == self.fancy_parent.se.y:
-                if (block.y <= eq2 and block.y <= eq4 and block.y >= eq1 and block.y >= eq3 and
-                    self.fancy_parent.sw.x <= block.x <= self.fancy_parent.se.x):
-                    handle_collision()
-            if top_corner == self.fancy_parent.sw.y:
-                if (block.y <= eq3 and block.y <= eq4 and block.y >= eq1 and block.y >= eq2 and
-                    self.fancy_parent.sw.x <= block.x <= self.fancy_parent.se.x):
-                    handle_collision()
-
-
     
     def update(self, fancy=False, fancy_block_width=None, fancy_block_height=None, fancy_width=None, fancy_height=None):
 
@@ -435,15 +355,43 @@ class Game:
 
         # Simulation parameters
         self.rope_elasticity = 0.1
-        self.gravity = 0.5
+        self.gravity = 0
         self.friction = 0.8
-        self.air_resistance = 0.995
+        self.air_resistance = 0
         self.elasticity = 0.8
         self.rigidness = 0.5
 
         self.players = [Block(375, 0, 50, 50, self, self.elasticity)]
         self.fancy_players = []
 
+    def Seperating_Axis_Theorem(self):
+        for idx, player in enumerate(self.fancy_players):
+            if idx == 0:
+                color = (255, 0, 0)
+            else:
+                color = (0, 255, 0)
+            for side in ["N", "E", "S", "W"]:
+                if side == "S":
+                    minx = min(player.ne.x, player.nw.x)
+                    maxx = max(player.ne.x, player.nw.x)
+                    pg.draw.line(self.screen, color, (minx, self.winheight/20), (maxx, self.winheight/20), 2)
+                if side == "N":
+                    minx = min(player.se.x, player.sw.x)
+                    maxx = max(player.se.x, player.sw.x)
+                    pg.draw.line(self.screen, color, (minx, self.winheight-self.winheight/20), (maxx, self.winheight-self.winheight/20), 2)
+                if side == "E":
+                    miny = min(player.ne.y, player.se.y)
+                    maxy = max(player.ne.y, player.se.y)
+                    pg.draw.line(self.screen, color, (self.winwidth/20, miny), (self.winwidth/20, maxy), 2)
+                if side == "W":
+                    miny = min(player.nw.y, player.sw.y)
+                    maxy = max(player.nw.y, player.sw.y)
+                    pg.draw.line(self.screen, color, (self.winwidth-self.winwidth/20, miny), (self.winwidth-self.winwidth/20, maxy), 2)
+        
+    
+    
+    
+    
     def open_settings_window(self):
         """
         Opens the settings window using tkinter.
@@ -580,13 +528,15 @@ class Game:
                     if block_distances > player.get_location_of_block_from_mouse():
                         block_distances = player.get_location_of_block_from_mouse()
                         closest_block = player
+            
             for player in self.players:
                 player.update()
                 player.draw(self.screen)
                 if closest_block == player:
                     player.grab()
-            for fancy_block in self.fancy_players:
-                fancy_block.draw(self.screen)
+            for player in self.fancy_players:
+                player.draw(self.screen)
+            self.Seperating_Axis_Theorem()
 
             pg.display.flip()
             self.clock.tick(60)

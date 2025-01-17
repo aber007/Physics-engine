@@ -249,8 +249,10 @@ class Game:
         self.friction = 0.8
         self.air_resistance = 0.995
         self.elasticity = 0.8
+        self.rigidness = 0.5
 
         self.players = [Block(375, 0, 50, 50, self, self.elasticity)]
+        self.fancy_players = []
 
     def open_settings_window(self):
         """
@@ -344,8 +346,8 @@ class Game:
                 number = len(self.players)
                 if abs(self.end_position[0] - self.start_position[0]) == 0 or abs(self.end_position[1] - self.start_position[1]) == 0:
                     self.end_position = (self.start_position[0] + 50, self.start_position[1] + 50)
-                self.players.append(Block(min(self.start_position[0], self.end_position[0]), min(self.start_position[1], self.end_position[1]), abs(self.end_position[0] - self.start_position[0]), abs(self.end_position[1] - self.start_position[1]), self, self.elasticity, number))
-                self.creating = False
+                    self.players.append(Block(min(self.start_position[0], self.end_position[0]), min(self.start_position[1], self.end_position[1]), abs(self.end_position[0] - self.start_position[0]), abs(self.end_position[1] - self.start_position[1]), self, self.elasticity, number))
+                    self.creating = False
     
     def run(self):
         def run_settings_thread():
