@@ -3,7 +3,6 @@ import sys
 import math
 import os
 from rich.console import Console
-from pygame.math import Vector2
 
 console = Console()
 
@@ -34,6 +33,14 @@ class Fancy_Block:
         self.moment_of_inertia = (1 / 12) * self.mass * (self.width**2 + self.height**2)
         self.angle = 0
 
+    def get_velocity(self):
+        """
+        Calculates the average velocity of the Fancy_Block based on its corners.
+        """
+        corners = [self.nw, self.ne, self.se, self.sw]
+        avg_vx = sum(corner.vx for corner in corners) / 4
+        avg_vy = sum(corner.vy for corner in corners) / 4
+        return avg_vx, avg_vy
 
 
     def draw(self, screen):
@@ -52,6 +59,61 @@ class Fancy_Block:
 
         pg.draw.polygon(screen, (0, 128, 255), [(self.nw.x, self.nw.y), (self.ne.x, self.ne.y), (self.se.x, self.se.y), (self.sw.x, self.sw.y)])
 
+    def apply_impulse(self, dvx, dvy):
+        """
+        Applies a change in velocity to the Fancy_Block and its corners.
+        """
+        for corner in [self.nw, self.ne, self.se, self.sw]:
+            corner.vx += dvx
+            corner.vy += dvy
+
+    def adjust_position(self, dx, dy):
+        """
+        Adjusts the position of the Fancy_Block and its corners.
+        """
+        self.x += dx
+        self.y += dy
+        for corner in [self.nw, self.ne, self.se, self.sw]:
+            corner.x += dx
+            corner.y += dy
+
+    
+    def handle_collision_response(self, collision_point, collision_normal, other, min_overlap):
+        """
+        Handles the collision response, ensuring blocks don't accelerate into each other.
+        """
+        # Calculate relative velocity at the collision point
+        self_vx, self_vy = self.get_velocity()
+        other_vx, other_vy = other.get_velocity()
+
+        relative_velocity = (other_vx - self_vx) * collision_normal[0] + (other_vy - self_vy) * collision_normal[1]
+
+        if relative_velocity > 0:
+            # No collision response if the blocks are separating
+            return
+
+        # Calculate the overlap distance (optional)
+        overlap_distance = min_overlap or 0
+
+        # Separate the blocks to resolve the overlap
+        total_mass = self.mass + other.mass
+        self_correction = overlap_distance * (other.mass / total_mass)
+        other_correction = overlap_distance * (self.mass / total_mass)
+        
+        self.adjust_position(-collision_normal[0] * self_correction, -collision_normal[1] * self_correction)
+        other.adjust_position(collision_normal[0] * other_correction, collision_normal[1] * other_correction)
+
+        # Calculate the impulse scalar
+        restitution = min(self.parent.elasticity, other.parent.elasticity)  # Use the lower elasticity
+        impulse = -(1 + restitution) * relative_velocity
+        impulse /= (1 / self.mass + 1 / other.mass)
+
+        # Apply impulse to the blocks
+        impulse_vector = (impulse * collision_normal[0], impulse * collision_normal[1])
+        
+        self.apply_impulse(-impulse_vector[0] / self.mass, -impulse_vector[1] / self.mass)
+        other.apply_impulse(impulse_vector[0] / other.mass, impulse_vector[1] / other.mass)
+
 
 
 
@@ -61,6 +123,16 @@ class Fancy_Block:
         """
         self.x = (self.nw.x + self.ne.x + self.sw.x + self.se.x) / 4
         self.y = (self.nw.y + self.ne.y + self.sw.y + self.se.y) / 4
+
+        for block in self.parent.fancy_players:
+            if block != self:
+                if self.detect_collision(block):
+                    pass
+        
+
+        
+        
+
 
         
         
@@ -108,6 +180,119 @@ class Fancy_Block:
             block2.vx -= correction_dx * self.rigidness
             block2.vy -= correction_dy * self.rigidness
 
+    def project(self, axis):
+            """
+            Projects the Fancy_Block onto an axis for the Separating Axis Theorem.
+            Returns the min and max projections.
+            """
+            points = [
+                (self.nw.x, self.nw.y),
+                (self.ne.x, self.ne.y),
+                (self.se.x, self.se.y),
+                (self.sw.x, self.sw.y),
+            ]
+            # Dot product to project points onto the axis
+            projections = [(point[0] * axis[0] + point[1] * axis[1]) for point in points]
+            return min(projections), max(projections)
+
+    def get_axes(self):
+        """
+        Returns the axes perpendicular to each edge of the Fancy_Block.
+        """
+        points = [
+            (self.nw.x, self.nw.y),
+            (self.ne.x, self.ne.y),
+            (self.se.x, self.se.y),
+            (self.sw.x, self.sw.y),
+        ]
+        axes = []
+        for i in range(len(points)):
+            # Get edge vector
+            p1 = points[i]
+            p2 = points[(i + 1) % len(points)]
+            edge = (p2[0] - p1[0], p2[1] - p1[1])
+            # Get perpendicular vector
+            axis = (-edge[1], edge[0])  # Rotate 90 degrees
+            # Normalize the axis
+            length = (axis[0]**2 + axis[1]**2)**0.5
+            axes.append((axis[0] / length, axis[1] / length))
+        return axes
+    
+    def find_collision_point(self, axis, other):
+        """
+        Finds the collision point and corner along the given axis.
+        """
+        # Project all corners of both blocks onto the axis
+        self_points = [
+            (self.nw.x, self.nw.y),
+            (self.ne.x, self.ne.y),
+            (self.se.x, self.se.y),
+            (self.sw.x, self.sw.y),
+        ]
+        other_points = [
+            (other.nw.x, other.nw.y),
+            (other.ne.x, other.ne.y),
+            (other.se.x, other.se.y),
+            (other.sw.x, other.sw.y),
+        ]
+
+        # Calculate projections for each corner
+        projections = []
+        for point in self_points:
+            proj = point[0] * axis[0] + point[1] * axis[1]
+            projections.append((proj, point))
+        for point in other_points:
+            proj = point[0] * axis[0] + point[1] * axis[1]
+            projections.append((proj, point))
+
+        # Sort projections to find the closest points
+        projections.sort(key=lambda x: x[0])
+
+        # Collision point is the overlap between the closest points
+        collision_point = projections[0][1]  # The point on the edge of overlap
+        collision_corner = projections[0][1]  # This is the corner causing collision
+
+        return collision_point, collision_corner
+
+
+    def detect_collision(self, other):
+        """
+        Detects collision between this Fancy_Block and another Fancy_Block using SAT.
+        Returns:
+        - (collision: bool, collision_point: tuple, collision_corner: tuple or None)
+        """
+        axes = self.get_axes() + other.get_axes()  # Combine axes from both blocks
+
+        min_overlap = float("inf")
+        collision_axis = None
+        collision_corner = None
+
+        for axis in axes:
+            # Get projections for both blocks
+            min_a, max_a = self.project(axis)
+            min_b, max_b = other.project(axis)
+
+            # Check for overlap
+            if max_a < min_b or max_b < min_a:
+                # No overlap on this axis, no collision
+                return False, None, None
+
+            # Calculate overlap distance
+            overlap = min(max_a, max_b) - max(min_a, min_b)
+            if overlap < min_overlap:
+                min_overlap = overlap
+                collision_axis = axis
+
+        # Find the collision point (if collision detected)
+        collision_point = self.find_collision_point(collision_axis, other)
+
+        # Handle collision response
+        self.handle_collision_response(collision_point, collision_axis, other, min_overlap)
+
+        return True
+
+    
+        
 
 
 
@@ -207,8 +392,8 @@ class Block:
         self.right = self.x + self.width
 
         self.check_for_collision_with_block()
-        if fancy:
-            self.get_hitbox()
+
+
 
         # Apply friction
         if self.vy == 0:
@@ -331,6 +516,8 @@ class Block:
             self.parent.is_grabbing = False
             self.line = False
             self.air_resistance = 0.995
+    
+    
 
 import pygame as pg
 import sys
@@ -355,9 +542,9 @@ class Game:
 
         # Simulation parameters
         self.rope_elasticity = 0.1
-        self.gravity = 0
+        self.gravity = 0.5
         self.friction = 0.8
-        self.air_resistance = 0
+        self.air_resistance = 0.995
         self.elasticity = 0.8
         self.rigidness = 0.5
 
@@ -371,22 +558,18 @@ class Game:
             else:
                 color = (0, 255, 0)
             for side in ["N", "E", "S", "W"]:
-                if side == "S":
-                    minx = min(player.ne.x, player.nw.x)
-                    maxx = max(player.ne.x, player.nw.x)
-                    pg.draw.line(self.screen, color, (minx, self.winheight/20), (maxx, self.winheight/20), 2)
                 if side == "N":
-                    minx = min(player.se.x, player.sw.x)
-                    maxx = max(player.se.x, player.sw.x)
-                    pg.draw.line(self.screen, color, (minx, self.winheight-self.winheight/20), (maxx, self.winheight-self.winheight/20), 2)
-                if side == "E":
-                    miny = min(player.ne.y, player.se.y)
-                    maxy = max(player.ne.y, player.se.y)
-                    pg.draw.line(self.screen, color, (self.winwidth/20, miny), (self.winwidth/20, maxy), 2)
-                if side == "W":
-                    miny = min(player.nw.y, player.sw.y)
-                    maxy = max(player.nw.y, player.sw.y)
-                    pg.draw.line(self.screen, color, (self.winwidth-self.winwidth/20, miny), (self.winwidth-self.winwidth/20, maxy), 2)
+                    axis = (0, -1)
+                    player.project(axis, color)
+                elif side == "E":
+                    axis = (1, 0)
+                    player.project(axis, color)
+                elif side == "S":
+                    axis = (0, 1)
+                    player.project(axis, color)
+                elif side == "W":
+                    axis = (-1, 0)
+                    player.project(axis, color)
         
     
     
@@ -536,7 +719,7 @@ class Game:
                     player.grab()
             for player in self.fancy_players:
                 player.draw(self.screen)
-            self.Seperating_Axis_Theorem()
+
 
             pg.display.flip()
             self.clock.tick(60)
